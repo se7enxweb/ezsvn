@@ -1,0 +1,156 @@
+#!/bin/sh -e
+APP=subversion
+VERS=1.0.6
+PLAT=linux-x86
+BDIR=`pwd`
+APPDIR=$BDIR/$APP-$VERS
+DSTNAME=$APP-$VERS-$PLAT
+PREFIX=$BDIR/inst
+PATH=/usr/local/bin:/usr/bin:/usr/sbin:/bin
+LD_LIBRARY_PATH=
+DYLD_LIBRARY_PATH=
+LD_RUN_PATH=
+CPPFLAGS="-I$PREFIX/include"
+CC=gcc
+CFLAGS="-g -O1"
+LDFLAGS="-L$PREFIX/lib"
+EDITOR="vi"
+export DYLD_LIBRARY_PATH LD_LIBRARY_PATH LD_RUN_PATH CC PATH CFLAGS CPPFLAGS \
+        LDFLAGS EDITOR
+
+/bin/rm -rf $APPDIR
+gzip -dc $APP-$VERS.tar.gz | tar xvf -
+
+# Build neon, statically
+cd $APPDIR/neon
+echo "Fixing neon configure script to prevent link to krb5 or gssapi . . ."
+cp -p ./configure ./configure.bak
+sed 's/krb5-config/BOGUSkrb5-config/g' < ./configure.bak > ./configure
+diff ./configure.bak ./configure || true
+echo " . . . done"
+echo "Compiling/installing static neon library to inst . . ."
+./configure --prefix=$PREFIX --enable-static --disable-shared \
+        --with-libs=$PREFIX --with-ssl --with-expat
+/bin/cp -p ./config.status ./config.status.bak
+echo "Cleaning up NEON_LIBS in config.status . . ."
+NEON_LIBS="$PREFIX/lib/libexpat.la"
+NEON_LIBS="$NEON_LIBS $PREFIX/lib/libssl.la"
+NEON_LIBS="$NEON_LIBS $PREFIX/lib/libcrypto.la"
+NEON_LIBS="$NEON_LIBS -lz"
+sed -e "s#\\(@NEON_LIBS@,\\)[^,]*,;t t\$#\\1$NEON_LIBS,;t t#" \
+        < config.status.bak > config.status
+diff config.status.bak config.status || true
+echo " . . . done"
+./config.status
+make install
+/bin/rm -rf $PREFIX/man $PREFIX/share
+echo ". . . done"
+
+# Build APR, statically
+echo "Compiling/installing static apr library to inst . . ."
+cd $APPDIR/apr
+./configure --prefix=$PREFIX --disable-libtool-lock --enable-threads \
+        --enable-static --disable-shared
+make all install
+echo ". . . done"
+
+# Build APR Util, statically
+echo "Compiling/installing static apr-util library to inst . . ."
+cd $APPDIR/apr-util
+./configure --prefix=$PREFIX --with-apr=$PREFIX/bin/apr-config \
+        --with-dbm=db4 --with-berkeley-db=$PREFIX --with-expat=$PREFIX \
+        --disable-libtool-lock --enable-threads \
+        --enable-static --disable-shared
+make all install
+echo ". . . done"
+
+# Build a statically-linked instance
+echo "Compiling/installing static subversion proggies to inst . . ."
+cd $APPDIR
+/bin/rm -rf neon apr apr-util
+if [ -f Makefile ]; then
+    make distclean
+fi
+./configure --prefix=$PREFIX --enable-all-static \
+        --with-apr=$PREFIX --with-apr-util=$PREFIX  \
+        --with-neon=$PREFIX --with-berkeley-db=$PREFIX \
+        --with-editor=$EDITOR --with-zlib \
+        --disable-mod-activation --without-apxs \
+        --without-jdk --without-swig
+# Modify the generated makefile to only link _partially_ statically
+mv Makefile Makefile.orig && sed \
+        -e "s,-all-static,-static," \
+        -e "s,-R$PREFIX/lib,," \
+        < Makefile.orig > Makefile
+make install
+echo ". . . done"
+
+#
+# Package up the results of above compile: svn* utils and man pages
+#
+cd $BDIR
+echo "May need sudo password (yours) for setting up root perms:"
+sudo /bin/rm -rf dstroot dstpkg $DSTNAME.tar.gz $DSTNAME.dmg /tmp/$DSTNAME.dmg
+mkdir -p dstroot/bin dstroot/man
+
+# Copy binaries into place and set permissions
+echo "Copying files to mirror of install directory and setting perms . . ."
+cp -p $PREFIX/bin/svn* dstroot/bin
+for f in `find dstroot/bin -type f -name 'svn*' -print`; do
+    strip $f >/dev/null 2>&1 || /bin/true
+done
+
+# Copy documentation into place and set permissions
+(cd $PREFIX; tar cf - man/man*/svn*) | (cd dstroot; tar xvf -)
+echo "Setting permissions in dstroot:"
+find dstroot -type d -exec chmod 755 '{}' ';' -print
+find dstroot/bin -type f -exec chmod 755 '{}' ';' -print
+find dstroot/man -type f -exec chmod 644 '{}' ';' -print
+find dstroot -name .DS_Store -exec /bin/rm -f '{}' ';' -print
+echo ". . . done"
+
+# Set up svnserve wrapper
+echo "Creating svnserve wrapper . . ."
+mv dstroot/bin/svnserve dstroot/bin/svnserve.exe
+cat > dstroot/bin/svnserve.wrapper <<EOFwrap
+#!/bin/sh
+
+# Default permissions to group writeable, no perms for other.
+umask 007
+
+# Determine location of the real svnserve executable
+SED=/usr/bin/sed; test -x \$SED || SED=/bin/sed
+SVNSERVE_EXE=\`echo "\$0" | \$SED -e 's/\.wrapper$//'\`.exe
+
+# Read command line arguments from system config file.
+# File should contain settings in shell variable format, like:
+# SVNSERVE_EXE="/path/to/real/svnserve.exe"
+# SVNSERVE_ARGS="--root /restricted/root/path"
+unset SVNSERVE_ARGS
+if [ -r /etc/sysconfig/svnserve ]; then
+    . /etc/sysconfig/svnserve
+elif [ -r /etc/svnserve ]; then
+    . /etc/svnserve
+fi
+
+# Hand off control to the real executable, with optional args
+exec "\$SVNSERVE_EXE" \$SVNSERVE_ARGS \${1+"\$@"}
+EOFwrap
+echo ". . . done"
+
+# Set final permissions before creating tar file
+echo "Setting final root permissions . . ."
+ROOTGRP=`groups root | sed -e 's/^.*: *//' | awk '{print $1}'`
+sudo chown -R root:$ROOTGRP dstroot
+sudo chgrp 800 dstroot/bin/svnserve.exe dstroot/bin/svnserve.wrapper
+sudo chmod 750 dstroot/bin/svnserve.exe dstroot/bin/svnserve.wrapper
+sudo chmod g+s dstroot/bin/svnserve.wrapper
+sudo ln -s ./svnserve.wrapper dstroot/bin/svnserve
+echo ". . . done"
+
+# Create final tar file
+echo "Creating tar archive:"
+cd $BDIR
+(cd dstroot; sudo tar cvf - bin man) | gzip -9 > $DSTNAME.tar.gz
+chmod 644 $DSTNAME.tar.gz
+ls -l $DSTNAME.tar.gz
