@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svn>
+<base url="http://pubsvn.ez.no/nextgen/trunk/" revision="HEAD" />
+<checkout url="http://zev.ez.no/svn/extensions/eztinymce/trunk/ezoe/" path="extension/ezoe" revision="HEAD" />
+<checkout url="https://user:password@11.22.33.44/svn/mystuff" path="extension/mystuff" revision="123" />
+</svn>
