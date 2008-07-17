@@ -1,62 +1,74 @@
 <?php
 require 'autoload.php';
-if ( !isset( $cli ) or !is_object( $cli ) )
-{
 
-    $cli = eZCLI::instance();
-    $script = eZScript::instance( array( 'description' => ( "eZ publish SVN Client \n" .
-                                                         "Syncronisation between repositories and environment.\n" .
-                                                         "\n" .
-                                                         "./extension/ezsvn/bin/ezsvn.php --user=admin --password=publish --config-id=12345" ),
-                                      'use-session' => false,
-                                      'use-modules' => false,
-                                      'use-extensions' => true ) );
+$input = new ezcConsoleInput( );
+$output = new ezcConsoleOutput( );
 
-    $script->startup();
+$helpOption = $input->registerOption( new ezcConsoleOption( 'h', 'help' ) );
+$helpOption->isHelpOption = true;
 
-    $options = $script->getOptions( "[config-id:][user:][password:][server:][server-port:][include-base][ignore-cache]",
-                                "",
-                                array( 'config-id' => 'Contentobject id or remote id of remote configuration object',
-                                       'user' => 'Username on remote server',
-                                       'password' => 'Password on remote server',
-                                       'server' => 'Soap Server FQDN',
-				                       'server-port' => 'Server Port',
-                                       'include-base' => 'Update the base sources',
-                                       'ignore-cache' => 'Do not clear caches' ) );
-    $script->initialize();
-    $isCRON=false;
-}
-else
-{
-	$isCRON=true;
-}
+$fileOption = $input->registerOption( new ezcConsoleOption( 'f', 'file', ezcConsoleInput::TYPE_STRING ) );
+$fileOption->shorthelp = "Path to XML definition file.";
+$fileOption->longhelp = "Path to XML definition file.";
+$fileOption->mandatory = false;
+$fileOption->default = 'svn.xml';
 
-$sys = eZSys::instance();
+$baseOption = $input->registerOption( new ezcConsoleOption( 'b', 'base', ezcConsoleInput::TYPE_NONE ) );
+$baseOption->shorthelp = "Update (svn export) base.";
+$baseOption->longhelp = "Update (svn export) base.";
+$baseOption->mandatory = false;
+$baseOption->default = false;
 
 try
 {
-    $svn = new xrowSVN( 'svn.xml' );
-}catch ( Exception $e )
+    $input->process();
+}
+catch ( ezcConsoleException $e )
+{
+    $output->outputText( $e->getMessage() );
+}
+
+if ( $helpOption->value === true )
+{
+    $output->outputText( $input->getHelpText( "SVN Client" ) );
+    $output->outputText( $input->getHelpText( "Syncronisation between repositories and environment." ) );
+    $output->outputText( $input->getSynopsis() );
+    foreach ( $input->getOptions() as $option )
+    {
+        $output->outputText( "-{$option->short}/{$option->long}: {$option->shorthelp}" );
+    }
+    exit( 0 );
+}
+
+$file = $fileOption->value;
+
+
+
+try
+{
+    $svn = new xrowSVN( $file );
+}
+catch ( Exception $e )
 {
     echo $e->getMessage()."\n";
 }
- 
+
 if ( is_object( $svn ) )
 {
-	if ( $options['include-base'] )
+	if ( $baseOption->value )
 	{
-	    $cli->output( 'Updating base.' );
+	    $output->outputText( 'Updating base.' );
 	    $svn->updateBase();
-	    $cli->output( 'Base updated.' );
-	}   
-	$cli->output( 'Updating checkouts.' ); 
+	    $output->outputText( 'Base updated.' );
+	}
+	$output->outputText( 'Updating checkouts.' ); 
 	$svn->update();
-    $cli->output( 'Checkouts updated.' ); 
+    $output->outputText( 'Checkouts updated.' ); 
 
     if ( !$options['ignore-cache']  )
     {
         eZCache::clearAll();
-        $cli->output( 'Cleared all caches.' );
+        $output->outputText( 'Cleared all caches.' );
     }
 	if ( !$isCRON )
 		return $script->shutdown();

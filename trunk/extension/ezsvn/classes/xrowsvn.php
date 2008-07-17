@@ -61,21 +61,43 @@ class xrowSVN
             $options['config-id'] = $ini->variable( 'Settings', 'ConfigID' );
         ;
     }
-
-    function update()
+    function updateBase()
     {
-        foreach ( $this->config->checkout as $checkout )
+        $revision = self::convertRevision( $this->config['revision'] );
+        $url = self::convertURL( $this->config['url'] );
+        if( isset( $checkout['path'] ) )
         {
-            if ( is_numeric( $checkout['revision'] ) )
+            $path = $checkout['path'];
+        }
+        else
+        {
+            $path = ".";
+        }
+        $return = svn_export( $url, realpath( $path ), false );
+        if ( $return === false )
+        {
+            throw new Exception( "Export Base failed on '" . $url . "' path '" . $path . "' failed." );
+        }
+        return $return;
+    }
+    private static function convertURL( $url, $setAuth = true )
+    {
+            svn_auth_set_parameter( SVN_AUTH_PARAM_DEFAULT_USERNAME, parse_url( $url, PHP_URL_USER ) );
+            svn_auth_set_parameter( SVN_AUTH_PARAM_DEFAULT_PASSWORD, parse_url( $url, PHP_URL_PASS ) );
+            $url = parse_url( $url, PHP_URL_SCHEME ) . '://' . parse_url( $url, PHP_URL_HOST ) . parse_url( $url, PHP_URL_PATH );
+            return $url;
+    }
+    private static function convertRevision( $revision )
+    {
+            if ( is_numeric( $revision ) )
             {
-                $revision = (int) $checkout['revision'];
+                $revision = (int) $revision;
             }
-            else
+            elseif( $revision )
             {
                 $revision = SVN_REVISION_HEAD;
-                if ( array_key_exists( 'revision', $checkout ) )
-                {
-                    switch ( $checkout['revision'] )
+
+                    switch ( $revision )
                     {
                         case 'HEAD':
                             {
@@ -103,11 +125,19 @@ class xrowSVN
                             }
                             break;
                     }
-                }
             }
-            svn_auth_set_parameter( SVN_AUTH_PARAM_DEFAULT_USERNAME, parse_url( $checkout['url'], PHP_URL_USER ) );
-            svn_auth_set_parameter( SVN_AUTH_PARAM_DEFAULT_PASSWORD, parse_url( $checkout['url'], PHP_URL_PASS ) );
-            $url = parse_url( $checkout['url'], PHP_URL_SCHEME ) . '://' . parse_url( $checkout['url'], PHP_URL_HOST ) . parse_url( $checkout['url'], PHP_URL_PATH );
+            else
+            {
+                $revision = SVN_REVISION_HEAD;
+            }
+            return $revision;
+    }
+    function update()
+    {
+        foreach ( $this->config->checkout as $checkout )
+        {
+            $revision = self::convertRevision( $checkout['revision'] );
+            $url = self::convertURL( $checkout['url'] );
             if ( is_dir( $checkout['path'] ) )
             {
                 $return = svn_update( $checkout['path'], $revision );
