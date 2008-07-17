@@ -2,6 +2,7 @@
 
 class xrowSVNWorkingCopy
 {
+    static public $MAX_SEARCH_DEPTH = 6;
     public $path;
     public $url;
     public $revision;
@@ -11,57 +12,102 @@ class xrowSVNWorkingCopy
     public $last_changed_date;
     public $last_changed_author;
     public $is_working_copy;
-    function __construct( $dir )
+    static function savecalculateRelativePath( $dir, $dir2 )
     {
+        if ( $dir == $dir2 )
+        {
+            return ".";
+        }
+        return ezcFile::calculateRelativePath( $dir, $dir2 );
+    }
+    function __construct( $dir, $basedir = false )
+    {
+        
+        if( $basedir )
+        {
+            $dir = self::savecalculateRelativePath( $dir, $basedir );
+        }
+        else
+        {
+            
+            $dir = self::savecalculateRelativePath( $dir, getcwd() );
+        }
+
+        $dir = str_replace( DIRECTORY_SEPARATOR, '/', $dir );
+        
         $info = svn_info( $dir, false );
         if ( $info )
         {
-            foreach( $info[0] as $key => $item )
+            $status = svn_status( $dir, SVN_NON_RECURSIVE );
+            if( count( $status ) == 1 )
+            {
+                $info = array_merge( $status[0], $info[0] );
+            }
+            else
+            {
+                $info = $info[0];
+            }
+            foreach( $info as $key => $item )
             {
                $this->$key = $item;
+            }
+            if ( !$this->is_working_copy )
+            {
+                throw new Exception( $dir .' Not a working copy.' );
             }
         }
         else
         {
-            throw new Exception( 'Not a working copy' );
+            throw new Exception( $dir .' Not a working copy.' );
         }
     }
-
-    function getFromPath( $path = './extension' )
+    function cleanup()
     {
-        $it = new RecursiveDirectoryIterator( $path );
-        // RecursiveIteratorIterator accepts the following modes:
-        //     LEAVES_ONLY = 0  (default)
-        //     SELF_FIRST  = 1
-        //     CHILD_FIRST = 2
-        $pattern = preg_quote( DIRECTORY_SEPARATOR . '\.svn', DIRECTORY_SEPARATOR );
-        foreach ( new RecursiveIteratorIterator( $it, 2 ) as $path )
+        if ( is_dir( $this->path ) )
         {
-            if ( strpos( $path, '.svn', strlen( $path ) - 4 ) and $path->isDir() )
-            {
-                $files[] = $path;
-            }
+            svn_cleanup( $this->path );
         }
-        $workingcopies = array();
-        foreach ( $files as $key => $file )
+    }
+    function toArray()
+    {
+        $return = array();
+        $class_vars = get_class_vars( get_class( $this ) );
+        foreach ( $class_vars as $name => $value )
         {
-            $files[$key] = realpath( $file );
-            $elements = explode( DIRECTORY_SEPARATOR, $files[$key] );
-            array_pop( $elements );
-            $workigncopydir = implode( DIRECTORY_SEPARATOR, $elements );
-            array_pop( $elements );
-            $workigncopytestdir = implode( DIRECTORY_SEPARATOR, $elements );
-            if ( @svn_info( $workigncopytestdir, false ) === false )
-            {
-                $info = svn_info( $workigncopydir, false );
-                if ( is_array( $info ) )
-                {
-                    $workigncopydir = ezcFile::calculateRelativePath( $workigncopydir, getcwd() );
-                    $workingcopies[] = new xrowSVNWorkingCopy( $workigncopydir );
-                }
-            }
+            $return[$name] = $this->$name;
+            /** @TODO Missing svn_status vars, they need to get defined in class*/
         }
-        return $workingcopies;
+        return $return;
+    }
+    static function getRootFromPath( $path = '.' )
+    {
+        $path = realpath( $path );
+        if( is_dir( $path . DIRECTORY_SEPARATOR . '.svn' ) )
+        {
+            return new xrowSVNWorkingCopy( $path );
+        }
+        else
+        {
+            return false;
+        }
+    }
+    static function getFromPath( $path = './extension' )
+    {
+        $path = realpath( $path );
+        $GLOBALS['xrowSVNWorkingCopy']['startdir'] = $path;
+        $GLOBALS['xrowSVNWorkingCopy']['workingcopies'] = array();
+
+        $root = self::getRootFromPath( $path = '.' );
+        if ( $root )
+        {
+            $GLOBALS['xrowSVNWorkingCopy']['root'] = $root;
+        }
+        $it = new RecursiveIteratorIterator( new xrowSVNRecursiveDirectoryIterator( $path ), RecursiveIteratorIterator::SELF_FIRST );
+        for ( $it->rewind(); $it->valid(); $it->next() )
+        {
+            //echo "debug: " .$it->getPathname()."\n";
+        }
+        return $GLOBALS['xrowSVNWorkingCopy']['workingcopies'];
     }
 }
 ?>
