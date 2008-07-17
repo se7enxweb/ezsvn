@@ -1,27 +1,39 @@
 <?php
 require 'autoload.php';
-$cli = eZCLI::instance();
-$script = eZScript::instance( array( 
-    'description' => ( "SVN XML build tool \n" . "Syncronisation between repositories and environment.\n" . "\n" . "./extension/ezsvn/bin/buildxml.php --file=svn.xml" ) , 
-    'use-session' => false , 
-    'use-modules' => false , 
-    'use-extensions' => true 
-) );
-$script->startup();
-$options = $script->getOptions( "[file:]", "", array( 
-    'file' => 'Path of file' 
-) );
-$script->initialize();
-$sys = eZSys::instance();
-if ( $options['file'] )
+
+$input = new ezcConsoleInput( );
+$output = new ezcConsoleOutput( );
+
+$helpOption = $input->registerOption( new ezcConsoleOption( 'h', 'help' ) );
+$helpOption->isHelpOption = true;
+
+$fileOption = $input->registerOption( new ezcConsoleOption( 'f', 'file', ezcConsoleInput::TYPE_STRING ) );
+$fileOption->shorthelp = "Path to output file.";
+$fileOption->longhelp = "Path to output file.";
+$fileOption->mandatory = false;
+$fileOption->default = 'svn.xml';
+
+try
 {
-    $file = $options['file'];
+    $input->process();
 }
-else
+catch ( ezcConsoleException $e )
 {
-    $file = 'svn.xml';
+    $output->outputText( $e->getMessage() );
 }
 
+if ( $helpOption->value === true )
+{
+    $output->outputText( $input->getHelpText( "Tool to create a XML file about svn information of a project" ) );
+    $output->outputText( $input->getSynopsis() );
+    foreach ( $input->getOptions() as $option )
+    {
+        $output->outputText( "-{$option->short}/{$option->long}: {$option->shorthelp}" );
+    }
+    exit( 0 );
+}
+
+$file = $fileOption->value;
 try
 {
     if ( file_exists( $file ) )
@@ -34,10 +46,10 @@ try
     );
     $workingcopies = xrowSVNWorkingCopy::getFromPath( '.' );
     xrowSVN::buildXML( $file, $workingcopies, $base );
+    $output->outputText( "Done. $file created." );
 }
 catch ( Exception $e )
 {
-    echo $e->getMessage() . "\n";
+    $output->outputText( $e->getMessage() );
 }
-$script->shutdown();
 ?>

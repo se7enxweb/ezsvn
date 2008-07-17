@@ -51,7 +51,7 @@ class xrowSVNWorkingCopy
             $workigncopydir = implode( DIRECTORY_SEPARATOR, $elements );
             array_pop( $elements );
             $workigncopytestdir = implode( DIRECTORY_SEPARATOR, $elements );
-            if ( svn_info( $workigncopytestdir, false ) === false )
+            if ( @svn_info( $workigncopytestdir, false ) === false )
             {
                 $info = svn_info( $workigncopydir, false );
                 if ( is_array( $info ) )
