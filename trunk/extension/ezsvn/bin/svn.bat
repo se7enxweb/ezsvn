@@ -1,5 +1,5 @@
 cd..
 cd..
 cd..
-php extension\ezsvn\bin\ezsvn.php
+php extension\ezsvn\bin\svn.php
 pause

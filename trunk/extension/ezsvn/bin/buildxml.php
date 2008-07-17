@@ -13,6 +13,11 @@ $fileOption->longhelp = "Path to output file.";
 $fileOption->mandatory = false;
 $fileOption->default = 'svn.xml';
 
+$overrideOption = $input->registerOption( new ezcConsoleOption( 'o', 'override', ezcConsoleInput::TYPE_NONE ) );
+$overrideOption->shorthelp = "Override existing output file.";
+$overrideOption->longhelp = "Override existing output file.";
+$overrideOption->mandatory = false;
+$overrideOption->default = false;
 try
 {
     $input->process();
@@ -36,7 +41,7 @@ if ( $helpOption->value === true )
 $file = $fileOption->value;
 try
 {
-    if ( file_exists( $file ) )
+    if ( file_exists( $file ) and !$overrideOption->value )
     {
         throw new Exception( "File '$file' already exists." );
     }
@@ -44,8 +49,8 @@ try
         'url' => "http://pubsvn.ez.no/nextgen/trunk/" , 
         'revision' => "HEAD" 
     );
-    $workingcopies = xrowSVNWorkingCopy::getFromPath( '.' );
-    xrowSVN::buildXML( $file, $workingcopies, $base );
+
+    xrowSVN::buildXML( $file, xrowSVNWorkingCopy::getFromPath( '.' ), xrowSVNWorkingCopy::getRootFromPath( '.' ) );
     $output->outputText( "Done. $file created." );
 }
 catch ( Exception $e )
