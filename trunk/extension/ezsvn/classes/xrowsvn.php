@@ -216,7 +216,7 @@ class xrowSVN
             return FALSE;
     }
 
-    function buildXML( $path, array $workigncopies, xrowSVNWorkingCopy $base )
+    function buildXML( $path, array $workigncopies, $base = false )
     {
         $doc = new DOMDocument( "1.0", "UTF-8" );
         $doc->preserveWhiteSpace = false;
