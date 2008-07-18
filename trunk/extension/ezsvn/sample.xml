@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svn url="http://svn.ez.no/svn/nextgen/trunk" revision="HEAD">
+  <checkout url="http://zev.ez.no/svn/extensions/eztinymce/trunk" revision="HEAD" path="extension/ezoe"/>
+  <checkout url="http://svn.projects.ez.no/ezoracle/trunk/extension/ezoracle" revision="29" path="extension/ezoracle"/>
+  <checkout url="http://svn.projects.ez.no/ezsvn/trunk/extension/ezsvn" revision="HEAD" path="extension/ezsvn"/>
+  <checkout url="http://svn.projects.ez.no/ezxajax/trunk/extension/ezxajax" revision="1655" path="extension/ezxajax"/>
+  <checkout url="http://svn.projects.ez.no/import/trunk" revision="6" path="extension/import"/>
+  <checkout url="http://svn.projects.ez.no/proxy/trunk/extension/proxy" revision="3" path="extension/proxy"/>
+  <checkout url="http://svn.projects.ez.no/rightnow/trunk/extension/rightnow" revision="16" path="extension/rightnow"/>
+</svn>
