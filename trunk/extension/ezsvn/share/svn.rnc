@@ -1,9 +1,6 @@
 element svn {
-  element base {
     attribute url { text },
     attribute path { text },
-    attribute revision { text }
-  }?,
     element checkout {
     attribute url { text },
     attribute path { text },

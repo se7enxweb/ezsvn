@@ -13,9 +13,9 @@ class ezsvnInfo
     {
         return array(
             'Name' => "eZ Publish svn extension",
-            'Version' => "1.0",
-            'Copyright' => "Copyright (C) 2007 xrow GbR",
-            'Author' => "xrow GbR",
+            'Version' => "2.0",
+            'Copyright' => "Copyright (C) 2003-2008 xrow GmbH",
+            'Author' => "xrow GmbH",
             'License' => "GPL License" );
     }
 }
