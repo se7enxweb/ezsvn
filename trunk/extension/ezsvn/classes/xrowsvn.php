@@ -85,14 +85,15 @@ class xrowSVN
 
     private static function convertURL( $url, $setAuth = true )
     {
-        svn_auth_set_parameter( SVN_AUTH_PARAM_DEFAULT_USERNAME, parse_url( $url, PHP_URL_USER ) );
-        svn_auth_set_parameter( SVN_AUTH_PARAM_DEFAULT_PASSWORD, parse_url( $url, PHP_URL_PASS ) );
+        svn_auth_set_parameter( SVN_AUTH_PARAM_DEFAULT_USERNAME, parse_url( (string)$url, PHP_URL_USER ) );
+        svn_auth_set_parameter( SVN_AUTH_PARAM_DEFAULT_PASSWORD, parse_url( (string)$url, PHP_URL_PASS ) );
         $url = parse_url( $url, PHP_URL_SCHEME ) . '://' . parse_url( $url, PHP_URL_HOST ) . parse_url( $url, PHP_URL_PATH );
         return $url;
     }
 
     private static function convertRevision( $revision )
     {
+	$revision = (string)$revision;
         if ( is_numeric( $revision ) )
         {
             $revision = (int) $revision;
