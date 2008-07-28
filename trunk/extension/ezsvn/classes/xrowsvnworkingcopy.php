@@ -2,7 +2,7 @@
 
 class xrowSVNWorkingCopy
 {
-    static public $MAX_SEARCH_DEPTH = 6;
+    public static $MAX_SEARCH_DEPTH = 6;
     public $path;
     public $url;
     public $revision;
@@ -12,6 +12,7 @@ class xrowSVNWorkingCopy
     public $last_changed_date;
     public $last_changed_author;
     public $is_working_copy;
+
     static function savecalculateRelativePath( $dir, $dir2 )
     {
         if ( $dir == $dir2 )
@@ -20,26 +21,29 @@ class xrowSVNWorkingCopy
         }
         return ezcFile::calculateRelativePath( $dir, $dir2 );
     }
+
     function __construct( $dir, $basedir = false )
     {
+        if ( ezcBaseFile::isAbsolutePath( $dir ) )
+        {
+            if ( $basedir )
+            {
+                $dir = self::savecalculateRelativePath( $dir, $basedir );
+            }
+            else
+            {
+                
+                $dir = self::savecalculateRelativePath( $dir, getcwd() );
+            }
+        }
         
-        if( $basedir )
-        {
-            $dir = self::savecalculateRelativePath( $dir, $basedir );
-        }
-        else
-        {
-            
-            $dir = self::savecalculateRelativePath( $dir, getcwd() );
-        }
-
         $dir = str_replace( DIRECTORY_SEPARATOR, '/', $dir );
         
         $info = svn_info( $dir, false );
         if ( $info )
         {
             $status = svn_status( $dir, SVN_NON_RECURSIVE );
-            if( count( $status ) == 1 )
+            if ( count( $status ) == 1 )
             {
                 $info = array_merge( $status[0], $info[0] );
             }
@@ -47,20 +51,21 @@ class xrowSVNWorkingCopy
             {
                 $info = $info[0];
             }
-            foreach( $info as $key => $item )
+            foreach ( $info as $key => $item )
             {
-               $this->$key = $item;
+                $this->$key = $item;
             }
-            if ( !$this->is_working_copy )
+            if ( ! $this->is_working_copy )
             {
-                throw new Exception( $dir .' Not a working copy.' );
+                throw new Exception( $dir . ' Not a working copy.' );
             }
         }
         else
         {
-            throw new Exception( $dir .' Not a working copy.' );
+            throw new Exception( $dir . ' Not a working copy.' );
         }
     }
+
     function cleanup()
     {
         if ( is_dir( $this->path ) )
@@ -68,6 +73,7 @@ class xrowSVNWorkingCopy
             svn_cleanup( $this->path );
         }
     }
+
     function toArray()
     {
         $return = array();
@@ -75,14 +81,15 @@ class xrowSVNWorkingCopy
         foreach ( $class_vars as $name => $value )
         {
             $return[$name] = $this->$name;
-            /** @TODO Missing svn_status vars, they need to get defined in class*/
+        /** @TODO Missing svn_status vars, they need to get defined in class*/
         }
         return $return;
     }
+
     static function getRootFromPath( $path = '.' )
     {
         $path = realpath( $path );
-        if( is_dir( $path . DIRECTORY_SEPARATOR . '.svn' ) )
+        if ( is_dir( $path . DIRECTORY_SEPARATOR . '.svn' ) )
         {
             return new xrowSVNWorkingCopy( $path );
         }
@@ -91,12 +98,13 @@ class xrowSVNWorkingCopy
             return false;
         }
     }
+
     static function getFromPath( $path = './extension' )
     {
         $path = realpath( $path );
         $GLOBALS['xrowSVNWorkingCopy']['startdir'] = $path;
         $GLOBALS['xrowSVNWorkingCopy']['workingcopies'] = array();
-
+        
         $root = self::getRootFromPath( $path = '.' );
         if ( $root )
         {
