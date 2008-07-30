@@ -146,8 +146,10 @@ if ( is_object( $svn ) )
     
     if ( $cacheOption->value and class_exists( 'eZCache' ) )
     {
-        eZCache::clearAll();
-        $output->outputLine( 'Cleared all caches.' );
+        #eZCache::clearAll();
+        #$output->outputLine( 'Cleared all caches.' );
+        $output->outputLine( 'Please clear all caches: php bin/php/ezcache.php --clear-all' );
     }
 }
+exit( 1 );
 ?>
