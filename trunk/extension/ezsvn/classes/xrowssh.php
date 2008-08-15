@@ -61,7 +61,7 @@ class xrowSSH
 		}
 	}
 	function exec_cmd($cmd) {
-		$this->stream = ssh2_exec($this->conn, $cmd);
+		$this->stream = ssh2_exec($this->conn, $cmd, false);
 		stream_set_blocking( $this->stream, true );
 	}
 

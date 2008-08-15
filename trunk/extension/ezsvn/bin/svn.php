@@ -11,7 +11,7 @@ $fileOption = $input->registerOption( new ezcConsoleOption( 'f', 'file', ezcCons
 $fileOption->shorthelp = "Path to XML definition file.";
 $fileOption->longhelp = "Path to XML definition file.";
 $fileOption->mandatory = false;
-$fileOption->default = 'svn.xml';
+$fileOption->default = false;
 
 $baseOption = $input->registerOption( new ezcConsoleOption( 'b', 'base', ezcConsoleInput::TYPE_NONE ) );
 $baseOption->shorthelp = "Update (svn export) base.";
@@ -47,7 +47,17 @@ if ( $helpOption->value === true )
 }
 
 $file = $fileOption->value;
-
+if ( $file === false )
+{
+if(file_exists('settings/override/svn.xml'))
+{
+$file = 'settings/override/svn.xml';
+}
+elseif(file_exists('svn.xml'))
+{
+$file = 'svn.xml';
+}
+}
 try
 {
     $svn = new xrowSVN( $file );
@@ -65,6 +75,7 @@ if ( is_object( $svn ) )
         try
         {
             $svn->updateBase();
+            php5 bin/php/ezpgenerateautoloads.php -e
         }
         catch ( Exception $e )
         {
@@ -122,7 +133,8 @@ if ( is_object( $svn ) )
                 if ( $answer == 'y' )
                 {
                     $output->outputLine( 'Deleting...' );
-                    ezcBaseFile::removeRecursive( $e->wc->path );
+                    $path = realpath( $e->wc->path ) ;
+                    ezcBaseFile::removeRecursive( realpath( $e->wc->path ) );
                     $output->outputLine( 'Trying again...' );
                     $svn->update( $e->wc->toArray() );
                     $output->outputLine( "Done." );
@@ -144,11 +156,12 @@ if ( is_object( $svn ) )
     }
     $output->outputLine( 'Checkouts updated.' );
     
-    if ( $cacheOption->value and class_exists( 'eZCache' ) )
+    if ( $cacheOption->value )
     {
-        #eZCache::clearAll();
-        #$output->outputLine( 'Cleared all caches.' );
-        $output->outputLine( 'Please clear all caches: php bin/php/ezcache.php --clear-all' );
+    	$command = new xrowConsoleCommand( "php5 bin/php/ezcache.php" );
+    	$command->addLongOption( 'clear-all' );
+    	exec( $command->getCommand(), $out, $retval );
+        $output->outputLine( 'All caches cleared.' );
     }
 }
 exit( 1 );

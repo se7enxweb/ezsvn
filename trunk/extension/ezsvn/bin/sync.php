@@ -19,6 +19,12 @@ $mirrorOption->longhelp = "Default mirror name";
 $mirrorOption->mandatory = false;
 $mirrorOption->default = 'Default';
 
+$cacheOption = $input->registerOption( new ezcConsoleOption( 'c', 'cache', ezcConsoleInput::TYPE_NONE ) );
+$cacheOption->shorthelp = "Clear Cache";
+$cacheOption->longhelp = "Clear Cache";
+$cacheOption->mandatory = false;
+$cacheOption->default = false;
+
 $binaryOption = $input->registerOption( new ezcConsoleOption( 'b', 'binary', ezcConsoleInput::TYPE_NONE ) );
 $binaryOption->shorthelp = "Include binary";
 $binaryOption->longhelp = "Include binary";
@@ -40,30 +46,29 @@ catch ( ezcConsoleException $e )
 }
 if ( $fileOption->value == false )
 {
-	if ( file_exists('settings/override/mirror.ini') )
-	{
-		$file = 'settings/override/mirror.ini';
-	}
-	elseif( file_exists('mirror.ini') )
-	{
-		$file = 'mirror.ini';
-	}
-}
-else 
-{
-	$file = $fileOption->value;
-}
-$ini =
-$reader = new ezcConfigurationIniReader( $file );
-$cfg = $reader->load();
-if( $cfg->hasGroup( $mirrorOption->value ) )
-{
-	$config = $cfg->getSettingsInGroup( $mirrorOption->value );
+    if ( file_exists( 'settings/override/mirror.ini' ) )
+    {
+        $file = 'settings/override/mirror.ini';
+    }
+    elseif ( file_exists( 'mirror.ini' ) )
+    {
+        $file = 'mirror.ini';
+    }
 }
 else
 {
-	$output->outputLine( 'Mirror definition not found.' );
-	exit( 0 );
+    $file = $fileOption->value;
+}
+$ini = $reader = new ezcConfigurationIniReader( $file );
+$cfg = $reader->load();
+if ( $cfg->hasGroup( $mirrorOption->value ) )
+{
+    $config = $cfg->getSettingsInGroup( $mirrorOption->value );
+}
+else
+{
+    $output->outputLine( 'Mirror definition not found.' );
+    exit( 0 );
 }
 
 $time = time();
@@ -77,6 +82,7 @@ try
 catch ( ezcConsoleException $e )
 {
     $output->outputText( $e->getMessage() );
+    exit( 0 );
 }
 
 if ( $helpOption->value === true )
@@ -93,14 +99,24 @@ if ( $helpOption->value === true )
 
 $output->outputLine( "Starting." );
 
-if ( $databaseOption->value === true)
+if ( $databaseOption->value === true )
 {
-
-    $cmd = "cd " . $config['RemoteEZPublishRoot'] . ' && mysqldump -C --no-data --add-drop-table --single-transaction -n --user=' . $config['RemoteDatabaseUser'] . ' -p' . $config['RemoteDatabasePassword'] . ' --host=' . $config['RemoteDatabaseHost'] . ' ' . $config['RemoteDatabaseName'] . ' > ' . $dbtstructurefilename;
-    $ssh->exec_cmd( $cmd );
+    
+    $command = new xrowConsoleCommand( "cd " . $config['RemoteEZPublishRoot'] . " && mysqldump" );
+    $command->addShortOption( 'C' );
+    $command->addLongOption( 'no-data' );
+    $command->addLongOption( 'add-drop-table' );
+    $command->addLongOption( 'single-transaction' );
+    $command->addShortOption( 'n' );
+    $command->addLongOption( 'user', $config['RemoteDatabaseUser'] );
+    $command->addLongOption( 'password', $config['RemoteDatabasePassword'] );
+    $command->addLongOption( 'host', $config['RemoteDatabaseHost'] );
+    $command->addArgument( $config['RemoteDatabaseName'] );
+    $command->redirectOuputAfter( $dbtstructurefilename, '>' );
+    $ssh->exec_cmd( $command->getCommand() );
+    echo $command->getCommand();
     $output->outputLine( 'Database structure dumped.' );
     
-
     $ignoretables = array( 
         'ezsession' , 
         'ezsearch_object_word_link' , 
@@ -109,15 +125,25 @@ if ( $databaseOption->value === true)
         'ezsearch_word' 
     );
     $ignoretablestr = '';
+    $command = new xrowConsoleCommand( "cd " . $config['RemoteEZPublishRoot'] . " && mysqldump" );
     foreach ( $ignoretables as $ignoretable )
     {
-        $ignoretablestr .= ' --ignore-table=' . $config['RemoteDatabaseName'] . '.' . $ignoretable . ' ';
+        $command->addLongOption( 'ignore-table', $config['RemoteDatabaseName'] . '.' . $ignoretable );
     }
-    $cmd = "cd " . $config['RemoteEZPublishRoot'] . ' && mysqldump ' . $ignoretablestr . ' --no-create-info -C --add-drop-table --single-transaction -n --user=' . $config['RemoteDatabaseUser'] . ' -p' . $config['RemoteDatabasePassword'] . ' --host=' . $config['RemoteDatabaseHost'] . ' ' . $config['RemoteDatabaseName'] . ' > ' . $dbdatafilename;
-    $ssh->exec_cmd( $cmd );
+    $command->addLongOption( 'no-create-info' );
+    $command->addLongOption( 'add-drop-table' );
+    $command->addLongOption( 'single-transaction' );
+    $command->addShortOption( 'n' );
+    $command->addLongOption( 'user', $config['RemoteDatabaseUser'] );
+    $command->addLongOption( 'password', $config['RemoteDatabasePassword'] );
+    $command->addLongOption( 'host', $config['RemoteDatabaseHost'] );
+    $command->addArgument( $config['RemoteDatabaseName'] );
+    $command->redirectOuputAfter( $dbdatafilename, '>' );
+    $ssh->exec_cmd( $command->getCommand() );
     $output->outputLine( 'Database data dumped.' );
 
 }
+waitTillFileIsReady( $config, $config['RemoteEZPublishRoot'] . '/' . $dbdatafilename, $output);
 if ( $binaryOption->value === true and $databaseOption->value === true )
 {
     $cmd = "cd " . $config['RemoteEZPublishRoot'] . " && tar -czf $archivefilename var/*/storage $dbdatafilename $dbtstructurefilename";
@@ -125,14 +151,51 @@ if ( $binaryOption->value === true and $databaseOption->value === true )
 }
 elseif ( $databaseOption->value === true )
 {
-	$cmd = "cd " . $config['RemoteEZPublishRoot'] . " && tar -czf $archivefilename $dbdatafilename $dbtstructurefilename";
+    $cmd = "cd " . $config['RemoteEZPublishRoot'] . " && tar -czf $archivefilename $dbdatafilename $dbtstructurefilename";
     $ssh->exec_cmd( $cmd );
 }
+waitTillFileIsReady( $config, $config['RemoteEZPublishRoot'] . '/' . $archivefilename, $output );
+function waitTillFileIsReady( $config, $file, $output )
+{
+
+
+	$connection = ssh2_connect( $config['RemoteServer'], $config['RemotePort'] );
+	ssh2_auth_password( $connection, $config['RemoteUser'], $config['RemotePassword'] );
+
+	$output->outputText( "Waiting." );
+	
+	$sftp = ssh2_sftp($connection);
+
+	for( $i=0; $i < 10001; $i++ )
+	{
+	$remotestatinfo = ssh2_sftp_stat($sftp, $file);
+	sleep( 10 );
+	$remotestatinfo2 = ssh2_sftp_stat($sftp, $file);
+	if ( $remotestatinfo['size'] == $remotestatinfo2['size'])
+	{
+		break;
+	}
+		$output->outputText( "." );
+		if ( $i == 10000)
+		{
+			throw new Exception( "Waited 10000 rounds. Aborting.");
+		}
+	}
+
+}
+	$connection = ssh2_connect( $config['RemoteServer'], $config['RemotePort'] );
+	ssh2_auth_password( $connection, $config['RemoteUser'], $config['RemotePassword'] );
+$sftp = ssh2_sftp($connection);
+$remotestatinfo = ssh2_sftp_stat($sftp, $config['RemoteEZPublishRoot'] . '/' . $archivefilename);
 
 $output->outputLine( "Start download." );
-$connection = ssh2_connect($config['RemoteServer'], $config['RemotePort']);
-ssh2_auth_password($connection, $config['RemoteUser'], $config['RemotePassword']);
-ssh2_scp_recv($connection, $config['RemoteEZPublishRoot'].'/'.$archivefilename, $archivefilename);
+
+
+$sftp = ssh2_sftp($connection);
+$remotestatinfo = ssh2_sftp_stat($sftp, $config['RemoteEZPublishRoot'] . '/' . $archivefilename);
+
+$output->outputLine( "Download size:" .$remotestatinfo['size']. " bytes" );
+ssh2_scp_recv( $connection, $config['RemoteEZPublishRoot'] . '/' . $archivefilename, $archivefilename );
 $output->outputLine( "All data is downloaded." );
 
 $ssh->unlink( $dbtstructurefilename );
@@ -140,29 +203,64 @@ $ssh->unlink( $dbdatafilename );
 $ssh->unlink( $archivefilename );
 unset( $ssh );
 $output->outputLine( 'Remote session completed.' );
+
+$localstatinfo = stat( $archivefilename );
+
+$output->outputLine( "Downloaded size:" .$localstatinfo['size']. " bytes" );
 $output->outputLine( 'Extracting data.' );
 if ( file_exists( $archivefilename ) )
 {
-	$tar = ezcArchive::open( $archivefilename );
-	$tar->extract(".");
-	unset( $tar );
-	unlink( $archivefilename );
+/* @TODO http://issues.ez.no/IssueView.php?Id=13501&activeItem=1
+ * 
+    $tar = ezcArchive::open( $archivefilename );
+    $tar->extract( "." );
+    unset( $tar );
+*/
+	exec( "tar -xzf $archivefilename", $out, $retval );
+    unlink( $archivefilename );
+
 }
 $output->outputLine( 'Injecting into database.' );
-$cmd = 'mysql -u' . $config['LocalDatabaseUser'] . ' -p' . $config['LocalDatabasePassword'] . ' -h' . $config['LocalDatabaseHost'] . ' -e"CREATE DATABASE IF NOT EXISTS '.$config['LocalDatabaseName'].'"';
-exec( $cmd, $out, $retval );
+$command = new xrowConsoleCommand( "mysql" );
+$command->addShortOption( 'e', 'CREATE DATABASE IF NOT EXISTS ' . $config['LocalDatabaseName'] );
+$command->addLongOption( 'user', $config['LocalDatabaseUser'] );
+$command->addLongOption( 'password', $config['LocalDatabasePassword'] );
+$command->addLongOption( 'host', $config['LocalDatabaseHost'] );
+exec( $command->getCommand(), $out, $retval );
 if ( file_exists( $dbtstructurefilename ) )
 {
-	$cmd = 'mysql -u' . $config['LocalDatabaseUser'] . ' -p' . $config['LocalDatabasePassword'] . ' -h' . $config['LocalDatabaseHost'] . ' ' . $config['LocalDatabaseName'] . ' < ' . $dbtstructurefilename;
-	exec( $cmd, $out, $retval );
-	unlink( $dbtstructurefilename );
+    $command = new xrowConsoleCommand( "mysql" );
+    $command->addShortOption( 'f' );
+    $command->addLongOption( 'user', $config['LocalDatabaseUser'] );
+    $command->addLongOption( 'password', $config['LocalDatabasePassword'] );
+    $command->addLongOption( 'host', $config['LocalDatabaseHost'] );
+    $command->addArgument( $config['LocalDatabaseName'] );
+    $command->redirectOuputAfter( $dbtstructurefilename, '<' );
+    exec( $command->getCommand(), $out, $retval );
+    unlink( $dbtstructurefilename );
 }
 if ( file_exists( $dbdatafilename ) )
 {
-	$cmd = 'mysql -u' . $config['LocalDatabaseUser'] . ' -p' . $config['LocalDatabasePassword'] . ' -h' . $config['LocalDatabaseHost'] . ' ' . $config['LocalDatabaseName'] . ' < ' . $dbdatafilename;
-	exec( $cmd, $out, $retval );
-	unlink( $dbdatafilename );
+    $command = new xrowConsoleCommand( "mysql" );
+    $command->addShortOption( 'f' );
+    $command->addLongOption( 'user', $config['LocalDatabaseUser'] );
+    $command->addLongOption( 'password', $config['LocalDatabasePassword'] );
+    $command->addLongOption( 'host', $config['LocalDatabaseHost'] );
+    $command->addArgument( $config['LocalDatabaseName'] );
+    $command->redirectOuputAfter( $dbdatafilename, '<' );
+    exec( $command->getCommand(), $out, $retval );
+    echo $command->getCommand();
+    unlink( $dbdatafilename );
 }
+if ( $cacheOption->value )
+{
+    $command = new xrowConsoleCommand( "php5 bin/php/ezcache.php" );
+    $command->addLongOption( 'clear-all' );
+    $command->addLongOption( 'purge' );
+    exec( $command->getCommand(), $out, $retval );
+}
+    $command = new xrowConsoleCommand( "chmod -Rf 777 var" );
+    exec( $command->getCommand(), $out, $retval );
 $output->outputLine( 'Done.' );
 exit( 1 );
 ?>
