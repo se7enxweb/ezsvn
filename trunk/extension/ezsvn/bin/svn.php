@@ -75,7 +75,9 @@ if ( is_object( $svn ) )
         try
         {
             $svn->updateBase();
-            php5 bin/php/ezpgenerateautoloads.php -e
+            $command = new xrowConsoleCommand( "php5 bin/php/ezpgenerateautoloads.php" );
+            $command->addShortOption( 'e' );
+            exec( $command->getCommand(), $out, $retval );
         }
         catch ( Exception $e )
         {
