@@ -1,6 +1,8 @@
 <?php
 require 'autoload.php';
 
+ezcBase::addClassRepository( './extension/ezsvn/classes', './extension/ezsvn/classes/autoloads' );
+
 $input = new ezcConsoleInput( );
 $output = new ezcConsoleOutput( );
 
