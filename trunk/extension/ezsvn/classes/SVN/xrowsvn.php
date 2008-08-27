@@ -137,7 +137,22 @@ class xrowSVN
         }
         return $revision;
     }
+    static function getLastSVNErrorCode()
+    {
+    	$pieces = array();
+    	$last = error_get_last();
+    	preg_match_all( '/svn[\s]+error\(s\)[\s]+occured[\s]+([0-9]+)[\s]+/im',$last['message'],$pieces);
 
+        if ( is_numeric( $pieces[1][0] ) )
+        {
+        	return $pieces[1][0];
+        }
+        else
+        {
+        	return false;
+        }
+    	
+    }
     static function update( $checkout )
     {
         if ( ! $checkout )
@@ -166,7 +181,15 @@ class xrowSVN
             $return = svn_update( $path, $revision );
             if ( $return === false )
             {
-                throw new xrowSVNUpdateException( 'Update on ' . $url . ' path ' . $path . ' failed.', $wc );
+            	$code = self::getLastSVNErrorCode();
+            	if ( $code == '170001' )
+            	{
+            		throw new xrowSVNAuthException( 'Access denied on ' . $url . '.', $wc );
+            	}
+            	else
+            	{
+            		throw new xrowSVNUpdateException( 'Update on ' . $url . ' path ' . $path . ' failed.', $wc );
+            	}
             }
         }
         else

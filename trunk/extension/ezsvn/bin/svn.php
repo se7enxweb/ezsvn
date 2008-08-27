@@ -99,6 +99,10 @@ if ( is_object( $svn ) )
                 $svn->update( $checkout );
                 $output->outputLine( "Done." );
             }
+            catch ( xrowSVNAuthException $e )
+            {
+            	$output->outputLine( $e->getMessage() );
+            }
             catch ( xrowSVNUpdateException $e )
             {
                 $output->outputText( $e->getMessage() );
