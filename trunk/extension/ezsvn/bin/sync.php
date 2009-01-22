@@ -75,9 +75,11 @@ $time = time();
 $archivefilename = "archive.tgz";
 $dbdatafilename = "database_data.sql";
 $dbtstructurefilename = "database_structure.sql";
+$connection = new xrowSSHConnection( $config['RemoteServer'], $config['RemotePort'] );
+$connection->login( $config['RemoteUser'], $config['RemotePassword'] );
 try
 {
-    $ssh = new xrowSSH( $config['RemoteUser'], $config['RemotePassword'], $config['RemoteServer'], $config['RemotePort'] );
+    $ssh = new xrowSSH( $connection );
 }
 catch ( ezcConsoleException $e )
 {
@@ -143,7 +145,7 @@ if ( $databaseOption->value === true )
     $output->outputLine( 'Database data dumped.' );
 
 }
-waitTillFileIsReady( $config, $config['RemoteEZPublishRoot'] . '/' . $dbdatafilename, $output);
+waitTillFileIsReady( $config, $config['RemoteEZPublishRoot'] . '/' . $dbdatafilename, $output );
 if ( $binaryOption->value === true and $databaseOption->value === true )
 {
     $cmd = "cd " . $config['RemoteEZPublishRoot'] . " && tar -czf $archivefilename var/*/storage $dbdatafilename $dbtstructurefilename";
@@ -155,47 +157,42 @@ elseif ( $databaseOption->value === true )
     $ssh->exec_cmd( $cmd );
 }
 waitTillFileIsReady( $config, $config['RemoteEZPublishRoot'] . '/' . $archivefilename, $output );
+
 function waitTillFileIsReady( $config, $file, $output )
 {
-
-
-	$connection = ssh2_connect( $config['RemoteServer'], $config['RemotePort'] );
-	ssh2_auth_password( $connection, $config['RemoteUser'], $config['RemotePassword'] );
-
-	$output->outputText( "Waiting." );
-	
-	$sftp = ssh2_sftp($connection);
-
-	for( $i=0; $i < 10001; $i++ )
-	{
-	$remotestatinfo = ssh2_sftp_stat($sftp, $file);
-	sleep( 10 );
-	$remotestatinfo2 = ssh2_sftp_stat($sftp, $file);
-	if ( $remotestatinfo['size'] == $remotestatinfo2['size'])
-	{
-		break;
-	}
-		$output->outputText( "." );
-		if ( $i == 10000)
-		{
-			throw new Exception( "Waited 10000 rounds. Aborting.");
-		}
-	}
+    global $connection;
+    
+    $output->outputText( "Waiting." );
+    $ssh2 = new xrowSSH( $connection );
+    
+    for ( $i = 0; $i < 10001; $i ++ )
+    {
+        $remotestatinfo = $ssh2->stat( $file );
+        sleep( 10 );
+        $remotestatinfo2 = $ssh2->stat( $file );
+        if ( $remotestatinfo['size'] == $remotestatinfo2['size'] )
+        {
+            break;
+        }
+        $output->outputText( "." );
+        if ( $i == 10000 )
+        {
+            throw new Exception( "Waited 10000 rounds. Aborting." );
+        }
+    }
 
 }
-	$connection = ssh2_connect( $config['RemoteServer'], $config['RemotePort'] );
-	ssh2_auth_password( $connection, $config['RemoteUser'], $config['RemotePassword'] );
-$sftp = ssh2_sftp($connection);
-$remotestatinfo = ssh2_sftp_stat($sftp, $config['RemoteEZPublishRoot'] . '/' . $archivefilename);
+
+$ssh2 = new xrowSSH( $connection );
+$remotestatinfo = $ssh2->stat( $config['RemoteEZPublishRoot'] . '/' . $archivefilename );
 
 $output->outputLine( "Start download." );
 
+$output->outputLine( "Download size:" . $remotestatinfo['size'] . " bytes" );
 
-$sftp = ssh2_sftp($connection);
-$remotestatinfo = ssh2_sftp_stat($sftp, $config['RemoteEZPublishRoot'] . '/' . $archivefilename);
+$ssh2->getFile( $config['RemoteEZPublishRoot'] . '/' . $archivefilename, $archivefilename );
 
-$output->outputLine( "Download size:" .$remotestatinfo['size']. " bytes" );
-ssh2_scp_recv( $connection, $config['RemoteEZPublishRoot'] . '/' . $archivefilename, $archivefilename );
+#ssh2_scp_recv( $connection, $config['RemoteEZPublishRoot'] . '/' . $archivefilename, $archivefilename );
 $output->outputLine( "All data is downloaded." );
 
 $ssh->unlink( $dbtstructurefilename );
@@ -206,17 +203,17 @@ $output->outputLine( 'Remote session completed.' );
 
 $localstatinfo = stat( $archivefilename );
 
-$output->outputLine( "Downloaded size:" .$localstatinfo['size']. " bytes" );
+$output->outputLine( "Downloaded size:" . $localstatinfo['size'] . " bytes" );
 $output->outputLine( 'Extracting data.' );
 if ( file_exists( $archivefilename ) )
 {
-/* @TODO http://issues.ez.no/IssueView.php?Id=13501&activeItem=1
+    /* @TODO http://issues.ez.no/IssueView.php?Id=13501&activeItem=1
  * 
     $tar = ezcArchive::open( $archivefilename );
     $tar->extract( "." );
     unset( $tar );
 */
-	exec( "tar -xzf $archivefilename", $out, $retval );
+    exec( "tar -xzf $archivefilename", $out, $retval );
     unlink( $archivefilename );
 
 }
@@ -259,8 +256,8 @@ if ( $cacheOption->value )
     $command->addLongOption( 'purge' );
     exec( $command->getCommand(), $out, $retval );
 }
-    $command = new xrowConsoleCommand( "chmod -Rf 777 var" );
-    exec( $command->getCommand(), $out, $retval );
+$command = new xrowConsoleCommand( "chmod -Rf 777 var" );
+exec( $command->getCommand(), $out, $retval );
 $output->outputLine( 'Done.' );
 exit( 1 );
 ?>
