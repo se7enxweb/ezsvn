@@ -36,6 +36,13 @@ $databaseOption->shorthelp = "Include database";
 $databaseOption->longhelp = "Include database";
 $databaseOption->mandatory = false;
 $databaseOption->default = true;
+
+$verboseOption = $input->registerOption( new ezcConsoleOption( 'v', 'verbose', ezcConsoleInput::TYPE_NONE ) );
+$verboseOption->shorthelp = "verbose";
+$verboseOption->longhelp = "verbose";
+$verboseOption->mandatory = false;
+$verboseOption->default = false;
+
 try
 {
     $input->process();
@@ -75,6 +82,11 @@ $time = time();
 $archivefilename = "archive.tgz";
 $dbdatafilename = "database_data.sql";
 $dbtstructurefilename = "database_structure.sql";
+$files = array( 
+    $archivefilename , 
+    $dbdatafilename , 
+    $dbtstructurefilename 
+);
 $connection = new xrowSSHConnection( $config['RemoteServer'], $config['RemotePort'] );
 $connection->login( $config['RemoteUser'], $config['RemotePassword'] );
 try
@@ -87,7 +99,7 @@ catch ( ezcConsoleException $e )
     exit( 0 );
 }
 
-if ( $helpOption->value === true )
+if ( $helpOption->value )
 {
     $output->outputLine( $input->getHelpText( "Mirror tool" ) );
     $output->outputText( $input->getHelpText( "Syncronisation between live and staging." ) );
@@ -99,12 +111,24 @@ if ( $helpOption->value === true )
     exit( 0 );
 }
 
-$output->outputLine( "Starting." );
-
-if ( $databaseOption->value === true )
+$ssh2 = new xrowSSH( $connection );
+foreach ( $files as $file )
 {
-    
-    $command = new xrowConsoleCommand( "cd " . $config['RemoteEZPublishRoot'] . " && mysqldump" );
+    $file = $config['RemoteEZPublishRoot'] . '/' . $file;
+    $remotestatinfo = $ssh2->stat( $file );
+    if ( $remotestatinfo )
+    {
+        $ssh2->unlink( $file );
+        if ( $verboseOption->value )
+        {
+            $output->outputLine( "Deleting old file <$file>" );
+        }
+    }
+}
+
+if ( $databaseOption->value )
+{
+    $command = new xrowConsoleCommand( "mysqldump" );
     $command->addShortOption( 'C' );
     $command->addLongOption( 'no-data' );
     $command->addLongOption( 'add-drop-table' );
@@ -114,9 +138,12 @@ if ( $databaseOption->value === true )
     $command->addLongOption( 'password', $config['RemoteDatabasePassword'] );
     $command->addLongOption( 'host', $config['RemoteDatabaseHost'] );
     $command->addArgument( $config['RemoteDatabaseName'] );
-    $command->redirectOuputAfter( $dbtstructurefilename, '>' );
+    $command->redirectOuputAfter( $config['RemoteEZPublishRoot'] . '/' . $dbtstructurefilename, '>' );
+    if ( $verboseOption->value )
+    {
+        $output->outputLine( "Executing command <" . $command->getCommand() . ">" );
+    }
     $ssh->exec_cmd( $command->getCommand() );
-    echo $command->getCommand();
     $output->outputLine( 'Database structure dumped.' );
     
     $ignoretables = array( 
@@ -127,11 +154,12 @@ if ( $databaseOption->value === true )
         'ezsearch_word' 
     );
     $ignoretablestr = '';
-    $command = new xrowConsoleCommand( "cd " . $config['RemoteEZPublishRoot'] . " && mysqldump" );
+    $command = new xrowConsoleCommand( "mysqldump" );
     foreach ( $ignoretables as $ignoretable )
     {
         $command->addLongOption( 'ignore-table', $config['RemoteDatabaseName'] . '.' . $ignoretable );
     }
+    $command->addShortOption( 'C' );
     $command->addLongOption( 'no-create-info' );
     $command->addLongOption( 'add-drop-table' );
     $command->addLongOption( 'single-transaction' );
@@ -140,59 +168,36 @@ if ( $databaseOption->value === true )
     $command->addLongOption( 'password', $config['RemoteDatabasePassword'] );
     $command->addLongOption( 'host', $config['RemoteDatabaseHost'] );
     $command->addArgument( $config['RemoteDatabaseName'] );
-    $command->redirectOuputAfter( $dbdatafilename, '>' );
+    $command->redirectOuputAfter( $config['RemoteEZPublishRoot'] . '/' . $dbdatafilename, '>' );
+    if ( $verboseOption->value )
+    {
+        $output->outputLine( "Executing command <" . $command->getCommand() . ">" );
+    }
     $ssh->exec_cmd( $command->getCommand() );
     $output->outputLine( 'Database data dumped.' );
 
 }
+
 waitTillFileIsReady( $config, $config['RemoteEZPublishRoot'] . '/' . $dbdatafilename, $output );
 if ( $binaryOption->value === true and $databaseOption->value === true )
 {
     $cmd = "cd " . $config['RemoteEZPublishRoot'] . " && tar -czf $archivefilename var/*/storage $dbdatafilename $dbtstructurefilename";
     $ssh->exec_cmd( $cmd );
 }
-elseif ( $databaseOption->value === true )
+elseif ( $databaseOption->value )
 {
     $cmd = "cd " . $config['RemoteEZPublishRoot'] . " && tar -czf $archivefilename $dbdatafilename $dbtstructurefilename";
     $ssh->exec_cmd( $cmd );
 }
 waitTillFileIsReady( $config, $config['RemoteEZPublishRoot'] . '/' . $archivefilename, $output );
 
-function waitTillFileIsReady( $config, $file, $output )
-{
-    global $connection;
-    
-    $output->outputText( "Waiting." );
-    $ssh2 = new xrowSSH( $connection );
-    
-    for ( $i = 0; $i < 10001; $i ++ )
-    {
-        $remotestatinfo = $ssh2->stat( $file );
-        sleep( 10 );
-        $remotestatinfo2 = $ssh2->stat( $file );
-        if ( $remotestatinfo['size'] == $remotestatinfo2['size'] )
-        {
-            break;
-        }
-        $output->outputText( "." );
-        if ( $i == 10000 )
-        {
-            throw new Exception( "Waited 10000 rounds. Aborting." );
-        }
-    }
-
-}
-
 $ssh2 = new xrowSSH( $connection );
 $remotestatinfo = $ssh2->stat( $config['RemoteEZPublishRoot'] . '/' . $archivefilename );
 
-$output->outputLine( "Start download." );
-
-$output->outputLine( "Download size:" . $remotestatinfo['size'] . " bytes" );
+$output->outputLine( "Start download <" . $config['RemoteEZPublishRoot'] . '/' . $archivefilename . "> " . $remotestatinfo['size'] . " bytes." );
 
 $ssh2->getFile( $config['RemoteEZPublishRoot'] . '/' . $archivefilename, $archivefilename );
 
-#ssh2_scp_recv( $connection, $config['RemoteEZPublishRoot'] . '/' . $archivefilename, $archivefilename );
 $output->outputLine( "All data is downloaded." );
 
 $ssh->unlink( $dbtstructurefilename );
@@ -203,7 +208,7 @@ $output->outputLine( 'Remote session completed.' );
 
 $localstatinfo = stat( $archivefilename );
 
-$output->outputLine( "Downloaded size:" . $localstatinfo['size'] . " bytes" );
+$output->outputLine( "Local file <" . $archivefilename . "> size: " . $localstatinfo['size'] . " bytes" );
 $output->outputLine( 'Extracting data.' );
 if ( file_exists( $archivefilename ) )
 {
@@ -223,6 +228,10 @@ $command->addShortOption( 'e', 'CREATE DATABASE IF NOT EXISTS ' . $config['Local
 $command->addLongOption( 'user', $config['LocalDatabaseUser'] );
 $command->addLongOption( 'password', $config['LocalDatabasePassword'] );
 $command->addLongOption( 'host', $config['LocalDatabaseHost'] );
+if ( $verboseOption->value )
+{
+    $output->outputLine( "Executing command <" . $command->getCommand() . ">" );
+}
 exec( $command->getCommand(), $out, $retval );
 if ( file_exists( $dbtstructurefilename ) )
 {
@@ -233,6 +242,10 @@ if ( file_exists( $dbtstructurefilename ) )
     $command->addLongOption( 'host', $config['LocalDatabaseHost'] );
     $command->addArgument( $config['LocalDatabaseName'] );
     $command->redirectOuputAfter( $dbtstructurefilename, '<' );
+    if ( $verboseOption->value )
+    {
+        $output->outputLine( "Executing command <" . $command->getCommand() . ">" );
+    }
     exec( $command->getCommand(), $out, $retval );
     unlink( $dbtstructurefilename );
 }
@@ -245,8 +258,11 @@ if ( file_exists( $dbdatafilename ) )
     $command->addLongOption( 'host', $config['LocalDatabaseHost'] );
     $command->addArgument( $config['LocalDatabaseName'] );
     $command->redirectOuputAfter( $dbdatafilename, '<' );
+    if ( $verboseOption->value )
+    {
+        $output->outputLine( "Executing command <" . $command->getCommand() . ">" );
+    }
     exec( $command->getCommand(), $out, $retval );
-    echo $command->getCommand();
     unlink( $dbdatafilename );
 }
 if ( $cacheOption->value )
@@ -260,4 +276,36 @@ $command = new xrowConsoleCommand( "chmod -Rf 777 var" );
 exec( $command->getCommand(), $out, $retval );
 $output->outputLine( 'Done.' );
 exit( 1 );
+
+function waitTillFileIsReady( $config, $file, $output, $sleep = 10 )
+{
+    global $connection;
+    
+    $ssh2 = new xrowSSH( $connection );
+    
+    $progress = new ezcConsoleProgressbar( $output, 10000, array( 
+        'step' => $sleep 
+    ) );
+    $progress->options->emptyChar = '-';
+    $progress->options->progressChar = '#';
+    $progress->options->formatString = "Checking file <$file>: %act%/%max% sec passed [%bar%]\n";
+    $i = 0;
+    while ( $i ++ < 10001 )
+    {
+        $remotestatinfo = $ssh2->stat( $file );
+        sleep( $sleep );
+        $remotestatinfo2 = $ssh2->stat( $file );
+        if ( $remotestatinfo['size'] == $remotestatinfo2['size'] )
+        {
+            break;
+        }
+        if ( $i == 10000 )
+        {
+            throw new Exception( "Waited 10000 rounds. Aborting." );
+        }
+        $progress->advance();
+    }
+    $progress->finish();
+
+}
 ?>

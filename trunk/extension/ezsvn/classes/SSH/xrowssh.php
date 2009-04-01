@@ -44,13 +44,25 @@ class xrowSSH
     function stat( $path )
     {
         $sftp = ssh2_sftp( $this->conn );
-        return ssh2_sftp_stat( $sftp, $path );
+        return @ssh2_sftp_stat( $sftp, $path );
     }
 
     function exec_cmd( $cmd )
     {
         $this->stream = ssh2_exec( $this->conn, $cmd, false );
         stream_set_blocking( $this->stream, true );
+        if ( is_resource( $this->stream ) )
+        {
+            while ( ! feof( $this->stream ) )
+            {
+                echo fread( $this->stream, 8192 );
+            }
+        }
+        else
+        {
+            throw new Exception( "no stream" );
+        
+        }
     }
 
     function get_output()
