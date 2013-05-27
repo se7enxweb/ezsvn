@@ -6,7 +6,7 @@ include_once( "lib/ezsoap/classes/ezsoaprequest.php" );
 
 $Module =& $Params['Module'];
 include_once( 'kernel/common/template.php' );
-$tpl =& templateInit();
+$tpl =& eZTemplate::factory();
 
 $http =& eZHTTPTool::instance();
 
